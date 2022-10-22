@@ -37,12 +37,8 @@ package txnsnapshot
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
-	"math"
-	"sync"
-	"sync/atomic"
-	"time"
-
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
@@ -61,7 +57,13 @@ import (
 	"github.com/tikv/client-go/v2/txnkv/txnlock"
 	"github.com/tikv/client-go/v2/txnkv/txnutil"
 	"github.com/tikv/client-go/v2/util"
+	"github.com/tikv/client-go/v2/xdp"
 	"go.uber.org/zap"
+	"math"
+	"sync"
+	"sync/atomic"
+	"time"
+	"unsafe"
 )
 
 const (
@@ -117,6 +119,7 @@ type KVSnapshot struct {
 	resolvedLocks   util.TSSet
 	committedLocks  util.TSSet
 	scanBatchSize   int
+	useXDP          bool
 
 	// Cache the result of BatchGet.
 	// The invariance is that calling BatchGet multiple times using the same start ts,
@@ -517,6 +520,13 @@ func (s *KVSnapshot) Get(ctx context.Context, k []byte) ([]byte, error) {
 	if ctx.Value(util.RequestSourceKey) == nil {
 		ctx = context.WithValue(ctx, util.RequestSourceKey, *s.RequestSource)
 	}
+
+	useXDP := ctx.Value(util.UseXDPKey) != nil || s.useXDP
+	if useXDP {
+		logutil.BgLogger().Info("use xdp!")
+		s.getWithXDP()
+	}
+
 	bo := retry.NewBackofferWithVars(ctx, getMaxBackoff, s.vars)
 	s.mu.RLock()
 	if s.mu.interceptor != nil {
@@ -540,6 +550,21 @@ func (s *KVSnapshot) Get(ctx context.Context, k []byte) ([]byte, error) {
 		return nil, tikverr.ErrNotExist
 	}
 	return val, nil
+}
+
+func (s *KVSnapshot) getWithXDP() ([]byte, error) {
+	rx := make(chan []byte, 1)
+	ptr := uintptr(unsafe.Pointer(&rx))
+
+	var data = make([]byte, unsafe.Sizeof(ptr), 100)
+	binary.LittleEndian.PutUint64(data, uint64(ptr))
+	data = append(data, []byte("hello")...)
+	xdp.XDPChan <- data
+
+	<-rx
+	//resp := <-rx
+	//logutil.BgLogger().Info("getWithXDP", zap.String("resp", string(resp)))
+	return nil, nil
 }
 
 func (s *KVSnapshot) get(ctx context.Context, bo *retry.Backoffer, k []byte) ([]byte, error) {
@@ -770,6 +795,10 @@ func (s *KVSnapshot) SetTaskID(id uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.taskID = id
+}
+
+func (s *KVSnapshot) SetUseXDP(useXDP bool) {
+	s.useXDP = useXDP
 }
 
 // SetRuntimeStats sets the stats to collect runtime statistics.

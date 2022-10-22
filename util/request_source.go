@@ -16,6 +16,10 @@ type RequestSourceKeyType struct{}
 // RequestSourceKey is used as the key of request source type in context.
 var RequestSourceKey = RequestSourceKeyType{}
 
+type UseXDPKeyType struct{}
+
+var UseXDPKey = UseXDPKeyType{}
+
 const (
 	// InternalTxnOthers is the type of requests that consume low resources.
 	// This reduces the size of metrics.
