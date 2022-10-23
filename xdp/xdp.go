@@ -12,12 +12,12 @@ import (
 
 // DefaultSocketOptions is the default SocketOptions used by an xdp.Socket created without specifying options.
 var DefaultSocketOptions = SocketOptions{
-	NumFrames:              128,
-	FrameSize:              2048,
-	FillRingNumDescs:       64,
-	CompletionRingNumDescs: 64,
-	RxRingNumDescs:         64,
-	TxRingNumDescs:         64,
+	NumFrames:              4096,
+	FrameSize:              4096,
+	FillRingNumDescs:       2048,
+	CompletionRingNumDescs: 2048,
+	RxRingNumDescs:         2048,
+	TxRingNumDescs:         2048,
 }
 
 type umemRing struct {
