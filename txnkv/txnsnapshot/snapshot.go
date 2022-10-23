@@ -555,10 +555,16 @@ func (s *KVSnapshot) Get(ctx context.Context, k []byte) ([]byte, error) {
 	return val, nil
 }
 
+var GET_HIST = metrics.TiKVSendReqHistogram.WithLabelValues("Get", "1", "0")
+
 func (s *KVSnapshot) getWithXDP(k []byte) ([]byte, bool) {
 	rx := make(chan []byte, 1)
 	ptr := uintptr(unsafe.Pointer(&rx))
 
+	begin := time.Now()
+	defer func() {
+		GET_HIST.Observe(time.Since(begin).Seconds())
+	}()
 	var data = make([]byte, unsafe.Sizeof(ptr), 100)
 	binary.LittleEndian.PutUint64(data, uint64(ptr))
 	data = append(data, []byte{0, 0, 0, 0, 0, 0, 0, 0}...)
