@@ -52,8 +52,17 @@ func init() {
 		}
 		go func() {
 			for {
-				req := <-XDPChan
-				txDescs := xsk.GetDescs(1, false)
+				var requests = [][]byte{<-XDPChan}
+			Fetch:
+				for {
+					select {
+					case req := <-XDPChan:
+						requests = append(requests, req)
+					default:
+						break Fetch
+					}
+				}
+				txDescs := xsk.GetDescs(len(requests), false)
 
 				newEther := &layers.Ethernet{
 					SrcMAC:       net.HardwareAddr{0x0e, 0xc3, 0x24, 0xee, 0x6d, 0xf5},
@@ -73,17 +82,18 @@ func init() {
 				}
 				newUDP.SetNetworkLayerForChecksum(newIP)
 
-				buf := gopacket.NewSerializeBuffer()
-				if err := gopacket.SerializeLayers(buf,
-					gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, newEther, newIP, newUDP, gopacket.Payload(req)); err != nil {
-					log.Fatalf("could not serialize packet: %s", err)
+				for i, req := range requests {
+					buf := gopacket.NewSerializeBuffer()
+					if err := gopacket.SerializeLayers(buf,
+						gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, newEther, newIP, newUDP, gopacket.Payload(req)); err != nil {
+						log.Fatalf("could not serialize packet: %s", err)
+					}
+					copy(xsk.GetFrame(txDescs[i]), buf.Bytes())
+					txDescs[i].Len = uint32(len(buf.Bytes()))
 				}
 
 				//newPacket := gopacket.NewPacket(buf.Bytes(), layers.LayerTypeEthernet, gopacket.NoCopy)
 				//fmt.Println(newPacket)
-
-				copy(xsk.GetFrame(txDescs[0]), buf.Bytes())
-				txDescs[0].Len = uint32(len(buf.Bytes()))
 
 				xsk.Transmit(txDescs)
 			}

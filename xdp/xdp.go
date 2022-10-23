@@ -245,7 +245,7 @@ func NewSocket(Ifindex int, QueueID int, options *SocketOptions) (xsk *Socket, e
 	}
 
 	sa := unix.SockaddrXDP{
-		Flags:   DefaultSocketFlags,
+		Flags:   DefaultSocketFlags | unix.XDP_USE_NEED_WAKEUP,
 		Ifindex: uint32(Ifindex),
 		QueueID: uint32(QueueID),
 	}
