@@ -18,7 +18,7 @@ var XDPChan = make(chan []byte)
 
 func init() {
 	go func() {
-		ifaceName := "enp34s0"
+		ifaceName := "ens5"
 		iface, err := net.InterfaceByName(ifaceName)
 		if err != nil {
 			log.Fatalf("lookup network iface %q: %s", ifaceName, err)
@@ -35,7 +35,7 @@ func init() {
 		l, err := link.AttachXDP(link.XDPOptions{
 			Program:   objs.XdpPassProg,
 			Interface: iface.Index,
-			Flags:     link.XDPGenericMode,
+			Flags:     link.XDPDriverMode,
 		})
 		if err != nil {
 			log.Fatalf("could not attach XDP program: %s", err)
@@ -56,13 +56,13 @@ func init() {
 				txDescs := xsk.GetDescs(1, false)
 
 				newEther := &layers.Ethernet{
-					SrcMAC:       net.HardwareAddr{0x2c, 0xf0, 0x5d, 0x2b, 0x74, 0xb9},
-					DstMAC:       net.HardwareAddr{0xb4, 0x09, 0x31, 0x84, 0x80, 0x62},
+					SrcMAC:       net.HardwareAddr{0x0e, 0xc3, 0x24, 0xee, 0x6d, 0xf5},
+					DstMAC:       net.HardwareAddr{0x0e, 0xe0, 0x0b, 0x4f, 0x19, 0x0f},
 					EthernetType: layers.EthernetTypeIPv4,
 				}
 				newIP := &layers.IPv4{
-					SrcIP:    net.IPv4(192, 168, 121, 133),
-					DstIP:    net.IPv4(192, 168, 125, 108),
+					SrcIP:    net.IPv4(172, 31, 19, 92),
+					DstIP:    net.IPv4(172, 31, 21, 91),
 					Version:  4,
 					TTL:      64,
 					Protocol: layers.IPProtocolUDP,
@@ -110,7 +110,11 @@ func init() {
 					payload := udp.Payload
 					ptr := binary.LittleEndian.Uint64(payload[:8])
 					ch := (*chan []byte)(unsafe.Pointer(uintptr(ptr)))
-					*ch <- payload[8:]
+					if len(payload) < 16 {
+						*ch <- nil
+					} else {
+						*ch <- payload[16:]
+					}
 				}
 				xsk.Fill(rxDescs)
 			}
