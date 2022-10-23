@@ -524,7 +524,10 @@ func (s *KVSnapshot) Get(ctx context.Context, k []byte) ([]byte, error) {
 	useXDP := ctx.Value(util.UseXDPKey) != nil || s.useXDP
 	if useXDP {
 		//logutil.BgLogger().Info("use xdp!")
-		return s.getWithXDP(k)
+		v, success := s.getWithXDP(k)
+		if success {
+			return v, nil
+		}
 	}
 
 	bo := retry.NewBackofferWithVars(ctx, getMaxBackoff, s.vars)
@@ -552,7 +555,7 @@ func (s *KVSnapshot) Get(ctx context.Context, k []byte) ([]byte, error) {
 	return val, nil
 }
 
-func (s *KVSnapshot) getWithXDP(k []byte) ([]byte, error) {
+func (s *KVSnapshot) getWithXDP(k []byte) ([]byte, bool) {
 	rx := make(chan []byte, 1)
 	ptr := uintptr(unsafe.Pointer(&rx))
 
@@ -563,9 +566,14 @@ func (s *KVSnapshot) getWithXDP(k []byte) ([]byte, error) {
 	xdp.XDPChan <- data
 
 	//<-rx
-	resp := <-rx
+	select {
+	case <-time.After(100 * time.Millisecond):
+		return nil, false
+	case resp := <-rx:
+		return resp, true
+	}
+
 	//logutil.BgLogger().Info("getWithXDP", zap.String("resp", string(resp)))
-	return resp, nil
 }
 
 func (s *KVSnapshot) get(ctx context.Context, bo *retry.Backoffer, k []byte) ([]byte, error) {
