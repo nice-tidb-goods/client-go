@@ -37,6 +37,11 @@ int xdp_pass_prog(struct xdp_md *ctx)
     void *ip_ptr = (void *)(long)(data + sizeof(struct ethhdr));
     if (ip_ptr + sizeof(struct iphdr) <= data_end)
     {
+      struct iphdr *ip = ip_ptr;
+      if (ip->protocol != IPPROTO_UDP)
+      {
+        return XDP_PASS;
+      }
       void *udp_ptr = (void *)(long)(ip_ptr + sizeof(struct iphdr));
       if (udp_ptr + sizeof(struct udphdr) <= data_end)
       {
